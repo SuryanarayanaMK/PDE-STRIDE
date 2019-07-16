@@ -8,7 +8,7 @@ by Suryanarayana Maddu, Bevan L. Cheeseman, Ivo F. Sbalzarini and Chrisitan L. M
 
 *********************************  Iterative_solvers_l0_l1.py  ******************************************
 
-These files contain the following functions: 
+This file contains the following functions: 
 
 build_linear_system(--) : Outputs Theta and Ut for gridded values of the state-variable measurements.
 Iterative_hard_thresholding_debias(--) : Outputs IHT-d sparse solutions
