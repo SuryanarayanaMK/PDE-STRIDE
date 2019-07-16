@@ -376,7 +376,7 @@ def STRidge(X, y, lasso_lam, lam, max_iter):
         
     return coeff[0,:]
 
-def stability_selection(X, y, reduced_size, M, B):
+def stability_selection(X, y, reduced_size, M, B, rescale):
     
     p = X.shape[1]
     np.random.seed(60)
@@ -431,9 +431,9 @@ def stability_selection(X, y, reduced_size, M, B):
             X = Xs_sub[sample]
             y = ys_sub[sample]
             y = y.reshape(sub_size,1)
-            coefs_iht_d = Iterative_hard_thresholding_debias(X, y, alphas_sample[sample,alpha], max_iter=10000, sub_iter=25, tol=1e-8, htp_flag = 1)   # multiplication by 3 is emphirical, 
+            coefs_iht_d = Iterative_hard_thresholding_debias(X, y, rescale*alphas_sample[sample,alpha], max_iter=10000, sub_iter=25, tol=1e-8, htp_flag = 1)   # multiplication by 3 is emphirical, 
             subsample_info_iht_d[sample,:,alpha] = coefs_iht_d[:]
-            coefs_STR   = STRidge(X, y, 3.0*alphas_sample[sample,alpha], lam = 10**-5, max_iter=10000)
+            coefs_STR   = STRidge(X, y, rescale*alphas_sample[sample,alpha], lam = 10**-5, max_iter=10000)
             subsample_info_STR[sample,:,alpha] = coefs_STR[:]
             
         if(sample%5 == 0):
