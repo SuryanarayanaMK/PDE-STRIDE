@@ -28,3 +28,17 @@ Parameters to play-around: N = sample size
                            D/P - to set the dictionary size p. D - max derivatives order, P - max polynomial order 
                            noise-level
 ***********************************************************************************************************
+
+********************************************   Burgers.py   ***********************************************
+ 
+---- Code to reproduce the plots for Burgers recovery upto 4-5 noise-levels for N = 250. 
+De-noising is achieved through truncating SVD singular values at the elbow. 
+ 
+Writes the output to files "IHTd_Burgers_n + str(sigma) + _N+str(N)_p+str(p)_dim+str(SVDmode)_B250.txt"
+
+The output files are read in the notebook "Burgers_results_visualization.ipynb" for visualization of stability plots.
+
+Try to play around with the sample-size (N), dictionary-size (p) and noise-levels.
+
+***********************************************************************************************************
+ 
