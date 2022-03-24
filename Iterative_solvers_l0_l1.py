@@ -278,61 +278,106 @@ def build_Theta(data, derivatives, derivatives_description, P, data_description 
                             
     return Theta, descr
 
+def debiasing(X, y, temp, coeff_new, smallinds, biginds, sub_iter, lasso_lam):
+    
+    """ De-baising step to update the sparse support coefficients
+    
+    Args: 
+        libraray: X
+        load vectot: y
+        outerloop estimate: temp
+        support: smallinds, biginds
+        number of de-biasing step: sub_iter
+        regularization: lasso_lam
+    
+    Returns:
+        returns the de-biased coefficients
+        
+    References:
+        [1] Foucart, Simon. "Hard thresholding pursuit: an algorithm for compressive sensing."
+            SIAM Journal on numerical analysis 49, no. 6 (2011): 2543-2563
+            
+        [2] Figueiredo, M. A., Nowak, R. D., & Wright, S. J. (2007). Gradient projection for sparse reconstruction: Application to compressed sensing and other inverse problems.
+            IEEE Journal of selected topics in signal processing, 1(4), 586-597.
+    """
+    
+    n, d = X.shape
+    frac_iter = 0
+    db_update  = np.zeros((1,len(biginds)))
+    grad    = np.zeros((len(biginds),))
+    grad_A  = np.zeros((n,))
+    LLL     = np.linalg.norm(X[:, biginds].T.dot(X[:, biginds]), 2) 
+    XTy_s   = X[:, biginds].T.dot(y).reshape( len(biginds), )
+    XTX_s   = X[:, biginds].T.dot( X[:, biginds])
+    db_update[0,:] = temp[0,biginds]
+    for k in range(0, sub_iter):
+        temp_2      = XTX_s.dot( db_update[0, :] ).reshape(len(biginds),)
+        grad        = (XTy_s - temp_2)
+        grad_A      = X[:, biginds].dot(grad)
+        # adaptive time-steps
+        if(grad.T.dot(grad) == 0):
+            break
+        else:
+            time_step = (grad.T.dot(grad))/(grad_A.T.dot(grad_A))
+        db_update[0,:] = db_update[0,:] + (time_step)*grad
+        
+        if( np.linalg.norm( y[:,0] - X[:, biginds].dot(db_update[0,:])  , 2)**2 < (len(biginds)*lasso_lam) ):
+            coeff_new[0, biginds]   = db_update[0,:].copy()
+            coeff_new[0, smallinds] = 0
+            frac_iter = frac_iter + 1
+            break
+    
+    coeff_new[0,biginds]   = db_update[0,:].copy() # new coeffs value
+    coeff_new[0,smallinds] = 0                  # new coeffs value
+        
+    return coeff_new, frac_iter
 
 def Iterative_hard_thresholding_debias(X, y, lasso_lam, max_iter, sub_iter, tol, htp_flag, print_flag=False):
+    """ De-baising step to update the sparse support coefficients
+    
+    Args: 
+        libraray: X
+        load vectot: y
+        number of iterations: max_iter
+        regularization: lasso_lam
+    
+    Returns:
+        IHT-d sparse coefficients
+        
+    References:
+        [1] Blumensath, T., & Davies, M. E. (2009). Iterative hard thresholding for compressed sensing.
+            Applied and computational harmonic analysis, 27(3), 265-274.
+            
+        [2] Foucart, Simon. "Hard thresholding pursuit: an algorithm for compressive sensing."
+            SIAM Journal on numerical analysis 49, no. 6 (2011): 2543-2563
+    """
     n,d = X.shape
     coeff_old  = np.zeros((1,d))
     coeff_new  = np.zeros((1,d))
     L = 1.0 
     LL = np.linalg.norm(X.T.dot(X),2)
-    one  =  (1./L)*(X.T.dot(y)).reshape(d,)
-    XTX  = X.T.dot(X)
-  
-    coeff_old[0,:] =  one #+ 0.01*np.random.normal(0, 1, d)
+    init  =  (1./L)*(X.T.dot(y)).reshape(d,)
+    XTX   = X.T.dot(X)
+    
+    coeff_old[0,:] =  init #+ 0.01*np.random.normal(0, 1, d)
     support =  np.arange(0,d).reshape(d,)
-    frac_iter = 0
     time_step = (1.0/LL) 
     for iteration in range(0, max_iter):
+        
+        ## Gradient descent step associated with the data-fitting objective
         temp = np.zeros((1,d))
-        if(htp_flag == 1):
-            temp[0,:] = coeff_old[0,:] + (2.0/LL) *(one  - XTX.dot(coeff_old[0,:])) #inclusion will make similar algorithm to HTP
-        else:
-            temp[0,:] = coeff_old[0,:].copy()
-
-        smallinds   = np.where( abs(temp[0,:]) <= lasso_lam/(L))[0]
+        temp[0,:] = coeff_old[0,:] + (2.0/LL) *(init - XTX.dot(coeff_old[0,:])) #inclusion will make similar algorithm to HTP
+        
+        ## Hard-thresholding of the gradient descent estimates
+        smallinds   = np.where( abs(temp[0,:]) <= lasso_lam)[0]
         biginds     = [i for i in range(d) if i not in smallinds]
-        if( len(biginds) == 0 ):  # if( len(biginds)==0 and iteration !=0 ):
+        if( len(biginds) == 0 ):  
             coeff_new[0,:] = 0
             return coeff_new[0,:]
         else:
-            #temp    = np.zeros((1,d)) # added this
-            temper  = np.zeros((1,len(biginds)))
-            grad    = np.zeros((len(biginds),))
-            grad_A  = np.zeros((n,))
-            LLL     = np.linalg.norm(X[:, biginds].T.dot(X[:, biginds]), 2) 
-            XTy_s   = X[:, biginds].T.dot(y).reshape( len(biginds), )
-            XTX_s   = X[:, biginds].T.dot( X[:, biginds])
-            for k in range(0, sub_iter):
-                temp_2      = XTX_s.dot( temp[0, biginds] ).reshape(len(biginds),)
-                grad        = (XTy_s - temp_2)
-                grad_A      = X[:, biginds].dot(grad)
-                if(grad.T.dot(grad) == 0):
-                    break
-                else:
-                    time_step = (grad.T.dot(grad))/(grad_A.T.dot(grad_A))
-                    
-                temper[0,:] = temp[0,biginds] + (time_step)*grad
-                if( np.linalg.norm( y[:,0] - X[:, biginds].dot(temper[0,:])  , 2)**2 < (len(biginds)*lasso_lam) ):
-                    coeff_new[0, biginds]   = temper[0,:].copy()
-                    coeff_new[0, smallinds] = 0
-                    frac_iter = frac_iter + 1
-                    break
-                
-                temp[0, biginds]   = temper[0,:].copy() # copy to old
-            
-            coeff_new[0,biginds]   = temper[0,:].copy() # new coeffs value
-            coeff_new[0,smallinds] = 0                  # new coeffs value
-        
+            ## de-biasing step to update the sparse support coefficients
+            coeff_new, frac_iter  = debiasing(X, y, temp, coeff_new, smallinds, biginds, sub_iter, lasso_lam)
+
         biginds     = np.array(biginds)
         # check for convergence
         if( (np.linalg.norm(coeff_new[0,:] - coeff_old[0,:], np.inf) < tol) and np.all(support == biginds) ):
@@ -376,10 +421,28 @@ def STRidge(X, y, lasso_lam, lam, max_iter):
         
     return coeff[0,:]
 
-def stability_selection(X, y, reduced_size, M, B, rescale):
+def subsampled_dictionaries(X, y, reduced_size, B, seed_):
+    """ Compute importance measures for each component of the dictionary
+        for varying complexity parameter \lambda
     
+    Args: 
+        libraray: X
+        load vectot: y
+        # data perturbations: B
+    
+    Returns:
+        B sub-sampled libraries and load-vectors
+        
+    References:
+        [1] Meinshausen, N., & Bühlmann, P. (2010). Stability selection. 
+            Journal of the Royal Statistical Society: Series B (Statistical Methodology), 72(4), 417-473.
+        [2] Shah, R. D., & Samworth, R. J. (2013). Variable selection with error control: another look at stability selection. 
+            Journal of the Royal Statistical Society: Series B (Statistical Methodology), 75(1), 55-80.
+    """
+
     p = X.shape[1]
-    np.random.seed(60)
+    ## First construct a dictionary of size (reduced_size x p)
+    np.random.seed(seed_)
     ordered_reduced = np.arange(0, len(y))
     np.random.shuffle(ordered_reduced)
     X_reduced = np.zeros((reduced_size, p))
@@ -388,12 +451,8 @@ def stability_selection(X, y, reduced_size, M, B, rescale):
     for i in range(0, reduced_size):
         X_reduced[i,:] = X[int(ordered_reduced[i]),:]
         y_reduced[i]   = y[int(ordered_reduced[i])]  # changed 
-           
-    alphas_sample = np.zeros((B, M))
-    subsample_info_lasso = np.zeros((B, p, M))
-    subsample_info_STR    = np.zeros((B, p, M))
-    subsample_info_iht_d  = np.zeros((B, p, M))
     
+    ## apply data perturbation to the reduced dictionary with sub-sampling
     sub_size = int(reduced_size/2)   # the subsize is not complimentary though
     X_sub = np.zeros((B, sub_size, p))
     y_sub = np.zeros((B, sub_size))
@@ -416,7 +475,40 @@ def stability_selection(X, y, reduced_size, M, B, rescale):
         
     Xs_sub = Xs_sub.reshape((B, sub_size, p)) 
     ys_sub = ys_sub.reshape((B, sub_size))
-
+    
+    return Xs_sub, ys_sub
+    
+def stability_selection(X, y, reduced_size, M, B, rescale):
+    """ Compute importance measures for each component of the dictionary
+        for varying complexity parameter \lambda
+    
+    Args: 
+        libraray: X
+        load vectot: y
+        # data perturbations: B
+        resolution of the regularization path: M
+        rescaling \lambda_{max}: rescale
+    
+    Returns:
+        importance measures for each component LASSO, IHT-d, STR, normalized-lambdas
+        
+    References:
+        [1] Meinshausen, N., & Bühlmann, P. (2010). Stability selection. 
+            Journal of the Royal Statistical Society: Series B (Statistical Methodology), 72(4), 417-473.
+        [2] Shah, R. D., & Samworth, R. J. (2013). Variable selection with error control: another look at stability selection. 
+            Journal of the Royal Statistical Society: Series B (Statistical Methodology), 75(1), 55-80.
+    """
+    
+    ## Construct sub-sampled dictionaries and load-vectors
+    p = X.shape[1]
+    Xs_sub, ys_sub = subsampled_dictionaries(X, y, reduced_size, B, 60)
+    
+    alphas_sample = np.zeros((B, M))
+    subsample_info_lasso = np.zeros((B, p, M))
+    subsample_info_STR    = np.zeros((B, p, M))
+    subsample_info_iht_d  = np.zeros((B, p, M))
+    
+    sub_size = int(reduced_size/2)
     factor      = np.exp(np.log(10)/M)
     weakness    = 0.2
     for sample in range(0, B):
@@ -439,4 +531,4 @@ def stability_selection(X, y, reduced_size, M, B, rescale):
         if(sample%5 == 0):
             print(" done with sample ", sample, " size ", reduced_size)
     
-    return subsample_info_iht_d, subsample_info_STR, alphas_sample
+    return subsample_info_lasso, subsample_info_iht_d, subsample_info_STR, alphas_sample
